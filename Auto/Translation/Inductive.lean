@@ -59,6 +59,33 @@ structure SimpleIndVal where
   /-- Instantiated projections -/
   projs : Option (Array Expr)
 
+
+def isComplexStructure (tyctorname : Name) : CoreM Bool := do
+  let .some (.inductInfo val) := (← getEnv).find? tyctorname
+    | throwError "isComplex :: {tyctorname} is not a type constructor"
+  return val.numIndices = 0
+  && !val.isRec
+  && !val.isUnsafe
+  && !val.isNested
+  -- is a structure / has only one constructor
+  && val.ctors.length = 1
+  -- is not mutually inductive
+  && val.all.length = 1
+
+/-- A type for structures with axioms. These cannot be
+  constructed (or selected from) in FOL, i.e. they are not
+  represented as FOL sorts, but individual _instances_ of this
+  type can be used in FOL by "flattening". -/
+structure ComplexStructure where
+  /-- Name of type constructor -/
+  name : Name
+  /-- Instantiated type constructor -/
+  type : Expr
+  /-- Instantiated fields -/
+  fields : Option (Array Expr)
+  /-- Instantiated axioms -/
+  axioms : Option (Array Expr)
+
 instance : ToMessageData SimpleIndVal where
   toMessageData siv :=
     m!"SimpleIndVal ⦗⦗ {siv.type}, Ctors : " ++
@@ -82,6 +109,7 @@ def SimpleIndVal.zetaReduce (si : SimpleIndVal) : MetaM SimpleIndVal := do
 structure CollectInduct.State where
   recorded : HashMap Name (Array Expr)     := {}
   sis      : Array (Array SimpleIndVal) := #[]
+  cis      : Array ComplexStructure := #[]
 
 abbrev IndCollectM := StateRefT CollectInduct.State MetaM
 
@@ -104,16 +132,36 @@ private def collectSimpleInduct
       return mkAppN (Expr.const projFn lvls) args))
   return ⟨tyctor, mkAppN (Expr.const tyctor lvls) args, ctors, projs⟩
 
+private def collectComplexStruct
+  (tyctor : Name) (lvls : List Level) (args : Array Expr) : MetaM ComplexStructure := do
+  let env ← getEnv
+  let .some info := getStructureInfo? env tyctor
+    | throwError "collectComplexStruct :: {tyctor} is not a structure"
+  let mut fields := Array.empty
+  let mut axioms := Array.empty
+  trace[auto.collectInd] "structure {info.structName} has fields {info.fieldNames}"
+  for field in info.fieldInfo do
+    if field.subobject?.isSome then
+      continue
+    let proj := (env.find? field.projFn).get!
+    let instantiated ← Meta.instantiateForall proj.type args
+    let isAxiom := (← Meta.isProp proj.type)
+    let typeStr := if isAxiom then "[axiom]" else "[function]"
+    trace[auto.collectInd] "{typeStr} {field.fieldName} : {instantiated}"
+  return ⟨tyctor, mkAppN (Expr.const tyctor lvls) args, .some fields, .some axioms⟩
+
 mutual
 
-  private partial def collectAppInstSimpleInduct (e : Expr) : IndCollectM Unit := do
+  private partial def collectAppInstInduct (e : Expr) : IndCollectM Unit := do
     let .const tyctor lvls := e.getAppFn
       | return
     let .some (.inductInfo val) := (← getEnv).find? tyctor
       | return
-    if !(← @id (CoreM _) (val.all.allM isSimpleInductive)) then
+    let isSimpleInductive ← @id (CoreM _) (val.all.allM isSimpleInductive)
+    let isComplexStructure := val.all.length = 1 && (← @id (CoreM _) (val.all.anyM isComplexStructure))
+    if !(isSimpleInductive || isComplexStructure) then
       trace[auto.collectInd] (m!"Warning : {tyctor} or some type within the " ++
-        "same mutual block is not a simple inductive type. Ignoring it ...")
+        m!"same mutual block ({val.all}) is neither a simple nor a complex inductive type. Ignoring it...")
       return
     /-
       Do not translate typeclasses as inductive types
@@ -134,40 +182,46 @@ mutual
         return
     for tyctor' in val.all do
       setRecorded ((← getRecorded).insert tyctor' (arr.push (mkAppN (.const tyctor' lvls) args)))
-    let mutualInductVal ← val.all.mapM (collectSimpleInduct · lvls args)
-    for inductval in mutualInductVal do
-      for (_, type) in inductval.ctors do
-        collectExprSimpleInduct type
-    setSis ((← getSis).push ⟨mutualInductVal⟩)
+    if isSimpleInductive then
+      let mutualInductVal ← val.all.mapM (collectSimpleInduct · lvls args)
+      for inductval in mutualInductVal do
+        for (_, type) in inductval.ctors do
+          collectExprInduct type
+      setSis ((← getSis).push ⟨mutualInductVal⟩)
+    if isComplexStructure then
+      trace[auto.collectInd] "Experimental support for structures with axioms: {tyctor}"
+      let complexStructures ← val.all.mapM (collectComplexStruct · lvls args)
+      for struct in complexStructures do
+        setCis ((← getCis).push struct)
 
-  partial def collectExprSimpleInduct : Expr → IndCollectM Unit
+  partial def collectExprInduct : Expr → IndCollectM Unit
   | e@(.app ..) => do
-    collectAppInstSimpleInduct e
-    let _ ← e.getAppArgs.mapM collectExprSimpleInduct
+    collectAppInstInduct e
+    let _ ← e.getAppArgs.mapM collectExprInduct
   | e@(.lam ..) => do trace[auto.collectInd] "Warning : Ignoring lambda expression {e}"
   | e@(.forallE _ ty body _) => do
     if body.hasLooseBVar 0 then
       trace[auto.collectInd] "Warning : Ignoring forall expression {e}"
       return
-    collectExprSimpleInduct ty
-    collectExprSimpleInduct body
+    collectExprInduct ty
+    collectExprInduct body
   | .letE .. => throwError "collectExprSimpleInduct :: Let-expressions should have been reduced"
   | .mdata .. => throwError "collectExprSimpleInduct :: mdata should have been consumed"
   | .proj .. => throwError "collectExprSimpleInduct :: Projections should have been turned into ordinary expressions"
-  | e => collectAppInstSimpleInduct e
+  | e => collectAppInstInduct e
 
 end
 
-def collectExprsSimpleInduct (es : Array Expr) : MetaM (Array (Array SimpleIndVal)) := do
-  let (_, st) ← (es.mapM collectExprSimpleInduct).run {}
-  return st.sis
+def collectExprsInduct (es : Array Expr) : MetaM (Array (Array SimpleIndVal) × Array ComplexStructure) := do
+  let (_, st) ← (es.mapM collectExprInduct).run {}
+  return (st.sis, st.cis)
 
 end Auto
 
 section Test
 
   private def skd (e : Expr) : Elab.Term.TermElabM Unit := do
-    let (_, st) ← (Auto.collectExprSimpleInduct (Auto.Expr.eraseMData e)).run {}
+    let (_, st) ← (Auto.collectExprInduct (Auto.Expr.eraseMData e)).run {}
     for siw in st.sis do
       for si in siw do
         logInfo m!"{si}"

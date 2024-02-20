@@ -542,13 +542,14 @@ def postprocessSaturate : MonoM Unit := do
   setLisArr lisArr
 
 /-- Collect inductive types -/
-def collectMonoMutInds : MonoM (Array (Array SimpleIndVal)) := do
+def collectMonoMutInds :  MonoM (Array (Array SimpleIndVal) × Array ComplexStructure) := do
   let cis := (Array.mk ((← getCiMap).toList.map Prod.snd)).concatMap id
   let citys ← cis.mapM (fun ci => do
     let cie ← ci.toExpr
     let ty ← Meta.inferType cie
     return Expr.eraseMData ty)
-  let minds ← collectExprsSimpleInduct citys
+  trace[auto.collectInd] "Collecting inductives from: {citys}"
+  let (minds, cinds) ← collectExprsInduct citys
   let cis ← (minds.concatMap id).mapM (fun ⟨_, type, ctors, projs⟩ => do
     let cis₁ ← collectConstInsts #[] #[] type
     let cis₂ ← ctors.mapM (fun (val, ty) => do
@@ -559,7 +560,7 @@ def collectMonoMutInds : MonoM (Array (Array SimpleIndVal)) := do
     let cis₃ ← projs.mapM (fun e => collectConstInsts #[] #[] e)
     return cis₁ ++ cis₂.concatMap id ++ cis₃.concatMap id)
   let _ ← (cis.concatMap id).mapM processConstInst
-  return minds
+  return (minds, cinds)
 
 namespace FVarRep
 
@@ -730,14 +731,14 @@ def intromono (lemmas : Array Lemma) (mvarId : MVarId) : MetaM MVarId := do
     return mvar.mvarId!)
 
 def monomorphize (lemmas : Array Lemma) (inhFacts : Array Lemma) (k : Reif.State → MetaM α) : MetaM α := do
-  let monoMAction : MonoM (Array (Array SimpleIndVal)) := (do
+  let monoMAction : MonoM (Array (Array SimpleIndVal) × Array ComplexStructure) := (do
     let startTime ← IO.monoMsNow
     initializeMonoM lemmas
     saturate
     postprocessSaturate
     trace[auto.mono] "Monomorphization took {(← IO.monoMsNow) - startTime}ms"
     collectMonoMutInds)
-  let (inductiveVals, monoSt) ← monoMAction.run {}
+  let ((inductiveVals, complexInds), monoSt) ← monoMAction.run {}
   -- Lemma instances
   let lis := monoSt.lisArr.concatMap id
   let fvarRepMFactAction : FVarRep.FVarRepM (Array UMonoFact) :=
