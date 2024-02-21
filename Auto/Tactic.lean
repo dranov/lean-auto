@@ -367,13 +367,14 @@ def runAuto
   -- Simplify `decide`
   let decide_simp_lem ← Lemma.ofConst ``Auto.Bool.decide_simp (.leaf "hw Auto.Bool.decide_simp")
   let lemmas ← lemmas.mapM (fun lem => Lemma.rewriteUPolyRigid lem decide_simp_lem)
-  let afterReify (uvalids : Array UMonoFact) (uinhs : Array UMonoFact) (minds : Array (Array SimpleIndVal)) : LamReif.ReifM Expr := (do
+  let afterReify (uvalids : Array UMonoFact) (uinhs : Array UMonoFact) (minds : Array (Array SimpleIndVal)) (structs : Array ComplexStructure) : LamReif.ReifM Expr := (do
     let exportFacts ← LamReif.reifFacts uvalids
     let mut exportFacts := exportFacts.map (Embedding.Lam.REntry.valid [])
     let _ ← LamReif.reifInhabitations uinhs
     let exportInhs := (← LamReif.getRst).nonemptyMap.toArray.map
       (fun (s, _) => Embedding.Lam.REntry.nonempty s)
     let exportInds ← LamReif.reifMutInds minds
+    let exportStructs ← LamReif.reifComplexStructs structs
     -- **Preprocessing in Verified Checker**
     let (exportFacts', exportInds) ← LamReif.preprocess exportFacts exportInds
     exportFacts := exportFacts'
@@ -397,7 +398,7 @@ def runAuto
   let (proof, _) ← Monomorphization.monomorphize lemmas inhFacts (@id (Reif.ReifM Expr) do
     let s ← get
     let u ← computeMaxLevel s.facts
-    (afterReify s.facts s.inhTys s.inds).run' {u := u})
+    (afterReify s.facts s.inhTys s.inds s.structs).run' {u := u})
   trace[auto.tactic] "Auto found proof of {← Meta.inferType proof}"
   return proof
 

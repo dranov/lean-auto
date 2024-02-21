@@ -59,6 +59,21 @@ structure SimpleIndVal where
   /-- Instantiated projections -/
   projs : Option (Array Expr)
 
+instance : ToMessageData SimpleIndVal where
+  toMessageData siv :=
+    m!"SimpleIndVal ⦗⦗ {siv.type}, Ctors : " ++
+      MessageData.array siv.ctors (fun (e₁, e₂) => m!"{e₁} : {e₂}") ++
+      (match siv.projs with
+       | .some arr =>
+         ", Projs : " ++ MessageData.array arr (fun e => m!"{e}")
+       | .none => m!"") ++
+      m!" ⦘⦘"
+
+def SimpleIndVal.zetaReduce (si : SimpleIndVal) : MetaM SimpleIndVal := do
+  let ⟨name, type, ctors, projs⟩ := si
+  let ctors ← ctors.mapM (fun (val, ty) => do return (← Meta.zetaReduce val, ← Meta.zetaReduce ty))
+  let projs ← projs.mapM (fun arr => arr.mapM Meta.zetaReduce)
+  return ⟨name, ← Meta.zetaReduce type, ctors, projs⟩
 
 def isComplexStructure (tyctorname : Name) : CoreM Bool := do
   let .some (.inductInfo val) := (← getEnv).find? tyctorname
@@ -75,7 +90,28 @@ def isComplexStructure (tyctorname : Name) : CoreM Bool := do
 /-- A type for structures with axioms. These cannot be
   constructed (or selected from) in FOL, i.e. they are not
   represented as FOL sorts, but individual _instances_ of this
-  type can be used in FOL by "flattening". -/
+  type can be used in FOL by "flattening". For example, suppose
+  we have the type (TotalOrder Nat):
+
+  ```
+  structure TotalOrder (t : Type) :=
+  le (x y : t) : Bool
+  le_refl       (x : t) : le x x
+  le_trans  (x y z : t) : le x y → le y z → le x z
+  le_antisymm (x y : t) : le x y → le y x → x = y
+  le_total    (x y : t) : le x y ∨ le y x
+  ```
+
+  We can represent this in FOL as an _uninterpreted_ sort `TotalOrder_Nat`
+  without constructors or selectors, but with the following declarations:
+
+  ```
+  (declare-sort TotalOrder_Nat 0)
+  (declare-fun le (TotalOrder_Nat Nat Nat) Bool)
+  (assert (forall ((inst TotalOrder_Nat) (x Nat)) le inst x x))
+  [... and so on]
+  ```
+  -/
 structure ComplexStructure where
   /-- Name of type constructor -/
   name : Name
@@ -86,21 +122,17 @@ structure ComplexStructure where
   /-- Instantiated axioms -/
   axioms : Option (Array Expr)
 
-instance : ToMessageData SimpleIndVal where
-  toMessageData siv :=
-    m!"SimpleIndVal ⦗⦗ {siv.type}, Ctors : " ++
-      MessageData.array siv.ctors (fun (e₁, e₂) => m!"{e₁} : {e₂}") ++
-      (match siv.projs with
+instance : ToMessageData ComplexStructure where
+  toMessageData str :=
+    m!"ComplexStructure ⦗⦗ {str.type}, Fields : " ++
+      (match str.fields with
+       | .some arr => MessageData.array arr (fun e => m!"{e}")
+       | .none => m!"") ++
+      (match str.axioms with
        | .some arr =>
-         ", Projs : " ++ MessageData.array arr (fun e => m!"{e}")
+         ", Axioms : " ++ MessageData.array arr (fun e => m!"{e}")
        | .none => m!"") ++
       m!" ⦘⦘"
-
-def SimpleIndVal.zetaReduce (si : SimpleIndVal) : MetaM SimpleIndVal := do
-  let ⟨name, type, ctors, projs⟩ := si
-  let ctors ← ctors.mapM (fun (val, ty) => do return (← Meta.zetaReduce val, ← Meta.zetaReduce ty))
-  let projs ← projs.mapM (fun arr => arr.mapM Meta.zetaReduce)
-  return ⟨name, ← Meta.zetaReduce type, ctors, projs⟩
 
 /--
   For a given type constructor `tyctor`, `CollectIndState[tyctor]`
@@ -148,6 +180,10 @@ private def collectComplexStruct
     let isAxiom := (← Meta.isProp proj.type)
     let typeStr := if isAxiom then "[axiom]" else "[function]"
     trace[auto.collectInd] "{typeStr} {field.fieldName} : {instantiated}"
+    if isAxiom then
+      axioms := axioms.push instantiated
+    else
+      fields := fields.push instantiated
   return ⟨tyctor, mkAppN (Expr.const tyctor lvls) args, .some fields, .some axioms⟩
 
 mutual

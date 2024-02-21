@@ -29,6 +29,7 @@ structure State where
   --   where `ty₁, ty₂, ⋯, tyₙ` are canonicalized types within `tyCanMap`
   inhTys          : Array UMonoFact     := {}
   inds            : Array (Array SimpleIndVal) := {}
+  structs         : Array ComplexStructure := {}
   declName?       : Option Name
 
 abbrev ReifM := StateT State MetaM

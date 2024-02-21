@@ -38,4 +38,22 @@ def MutualIndInfo.mpAll? (rw : LamTerm) : MutualIndInfo → Option MutualIndInfo
   | .some ii', .some tail' => .some (.cons ii' tail')
   | _,         _           => .none
 
+structure StructInfo where
+  type  : LamSort
+  fields : Option (List (LamSort × LamTerm))
+  axioms : Option (List LamTerm)
+
+def StructInfo.toString (i : StructInfo) :=
+  s!"IndIStructInfonfo ⦗⦗ {i.type} || " ++
+    (match i.fields with
+      | .some arr => String.intercalate ", " (arr.map (fun (s, t) => s!"{t} : {s}"))
+      | .none => "") ++
+    (match i.axioms with
+     | .some arr => " || " ++ String.intercalate ", " (arr.map (fun t => s!"{t}"))
+     | .none => "") ++ " ⦘⦘"
+
+instance : ToString StructInfo where
+  toString := StructInfo.toString
+
+
 end Auto.Embedding.Lam

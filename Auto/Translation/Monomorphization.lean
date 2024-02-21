@@ -738,7 +738,7 @@ def monomorphize (lemmas : Array Lemma) (inhFacts : Array Lemma) (k : Reif.State
     postprocessSaturate
     trace[auto.mono] "Monomorphization took {(← IO.monoMsNow) - startTime}ms"
     collectMonoMutInds)
-  let ((inductiveVals, complexInds), monoSt) ← monoMAction.run {}
+  let ((inductiveVals, complexStructs), monoSt) ← monoMAction.run {}
   -- Lemma instances
   let lis := monoSt.lisArr.concatMap id
   let fvarRepMFactAction : FVarRep.FVarRepM (Array UMonoFact) :=
@@ -774,7 +774,7 @@ def monomorphize (lemmas : Array Lemma) (inhFacts : Array Lemma) (k : Reif.State
     let startTime ← IO.monoMsNow
     trace[auto.mono] "Monomorphizing inductive types took {(← IO.monoMsNow) - startTime}ms"
     let (inductiveVals, s) ← (fvarRepMInductAction inductiveVals).run s
-    return (s.ffvars, Reif.State.mk s.ffvars uvalids polyVal s.tyCanMap inhs inductiveVals none))
+    return (s.ffvars, Reif.State.mk s.ffvars uvalids polyVal s.tyCanMap inhs inductiveVals complexStructs none))
   MetaState.runWithIntroducedFVars metaStateMAction k
 
 end Auto.Monomorphization

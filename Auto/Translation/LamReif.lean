@@ -1672,6 +1672,24 @@ def reifMutInds (minds : Array (Array SimpleIndVal)) : ReifM (Array MutualIndInf
     ret := ret.push mi
   return ret
 
+def reifStruct (struct : ComplexStructure) : ReifM (Option StructInfo) := do
+  let ⟨name, ty, fields, axioms⟩ := struct
+  let rty ← reifType ty
+  let rfields ← fields.mapM (fun fs => fs.mapM reifTermCheckType)
+  let raxioms ← axioms.mapM (fun axs => axs.mapM reifTermCheckType)
+  let raxioms_terms := raxioms.map (fun axs => axs.map (fun ax => ax.2))
+  let ret := ⟨rty, rfields.map Array.data, raxioms_terms.map Array.data⟩
+  trace[auto.lamReif.printResult] "Successfully reified struct info {struct} to {ret}"
+  return .some ret
+
+def reifComplexStructs (structs : Array ComplexStructure) : ReifM (Array StructInfo) := do
+  let mut ret := #[]
+  for struct in structs do
+    let .some si ← reifStruct struct
+      | continue
+    ret := ret.push si
+  return ret
+
 partial def collectDerivFor (re : REntry) : ReifM DTr := do
   let proof ← lookupREntryProof! re
   match proof with
