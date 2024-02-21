@@ -118,20 +118,16 @@ structure ComplexStructure where
   /-- Instantiated type constructor -/
   type : Expr
   /-- Instantiated fields -/
-  fields : Option (Array Expr)
+  fields : Array (Name × Expr)
   /-- Instantiated axioms -/
-  axioms : Option (Array Expr)
+  axioms : Array (Name × Expr)
 
 instance : ToMessageData ComplexStructure where
   toMessageData str :=
     m!"ComplexStructure ⦗⦗ {str.type}, Fields : " ++
-      (match str.fields with
-       | .some arr => MessageData.array arr (fun e => m!"{e}")
-       | .none => m!"") ++
-      (match str.axioms with
-       | .some arr =>
-         ", Axioms : " ++ MessageData.array arr (fun e => m!"{e}")
-       | .none => m!"") ++
+      MessageData.array str.fields (fun (n, e) => m!"{n} : {e}") ++
+      ", Axioms : " ++
+      MessageData.array str.axioms (fun (n, e) => m!"{n} : {e}") ++
       m!" ⦘⦘"
 
 /--
@@ -175,16 +171,17 @@ private def collectComplexStruct
   for field in info.fieldInfo do
     if field.subobject?.isSome then
       continue
+    let name := field.fieldName
     let proj := (env.find? field.projFn).get!
     let instantiated ← Meta.instantiateForall proj.type args
     let isAxiom := (← Meta.isProp proj.type)
     let typeStr := if isAxiom then "[axiom]" else "[function]"
     trace[auto.collectInd] "{typeStr} {field.fieldName} : {instantiated}"
     if isAxiom then
-      axioms := axioms.push instantiated
+      axioms := axioms.push (name, instantiated)
     else
-      fields := fields.push instantiated
-  return ⟨tyctor, mkAppN (Expr.const tyctor lvls) args, .some fields, .some axioms⟩
+      fields := fields.push (name, instantiated)
+  return ⟨tyctor, mkAppN (Expr.const tyctor lvls) args, fields, axioms⟩
 
 mutual
 

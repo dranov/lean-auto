@@ -563,9 +563,9 @@ def collectMonoMutInds :  MonoM (Array (Array SimpleIndVal) × Array ComplexStru
   -- process `cinds`
   let cisc ← cinds.mapM (fun ⟨_, type, fields, axioms⟩ => do
     let cis₁ ← collectConstInsts #[] #[] type
-    let fields := (match fields with | .some fields => fields | .none => #[])
+    let fields := fields.map Prod.snd
     let cis₂ ← fields.mapM (fun e => collectConstInsts #[] #[] e)
-    let axioms := (match axioms with | .some axioms => axioms | .none => #[])
+    let axioms := axioms.map Prod.snd
     let cis₃ ← axioms.mapM (fun e => collectConstInsts #[] #[] e)
     return cis₁ ++ cis₂.concatMap id ++ cis₃.concatMap id)
   let cis := (cism.concatMap id) ++ (cisc.concatMap id)
@@ -768,12 +768,14 @@ def monomorphize (lemmas : Array Lemma) (inhFacts : Array Lemma) (k : Reif.State
     cstrs.mapM (fun cstr => do
       let ⟨name, type, fields, axioms⟩ := cstr
       FVarRep.processType type
-      let fields ← fields.mapM (fun arr => arr.mapM (fun e => do
+      let fields ← fields.mapM (fun (name, e) => do
         FVarRep.processType e
-        FVarRep.replacePolyWithFVar e))
-      let axioms ← axioms.mapM (fun arr => arr.mapM (fun e => do
+        let e' ← FVarRep.replacePolyWithFVar e
+        return (name,e'))
+      let axioms ← axioms.mapM (fun (name, e) => do
         FVarRep.processType e
-        FVarRep.replacePolyWithFVar e))
+        let e' ← FVarRep.replacePolyWithFVar e
+        return (name,e'))
       return ⟨name, type, fields, axioms⟩)
   let metaStateMAction : MetaState.MetaStateM (Array FVarId × Reif.State) := (do
     let (uvalids, s) ← fvarRepMFactAction.run { ciMap := monoSt.ciMap }

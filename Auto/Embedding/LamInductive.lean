@@ -40,17 +40,15 @@ def MutualIndInfo.mpAll? (rw : LamTerm) : MutualIndInfo → Option MutualIndInfo
 
 structure StructInfo where
   type  : LamSort
-  fields : Option (List (LamSort × LamTerm))
-  axioms : Option (List LamTerm)
+  fields : List (Lean.Name × LamSort × LamTerm)
+  axioms : List (Lean.Name × LamSort × LamTerm)
 
 def StructInfo.toString (i : StructInfo) :=
-  s!"IndIStructInfonfo ⦗⦗ {i.type} || " ++
-    (match i.fields with
-      | .some arr => String.intercalate ", " (arr.map (fun (s, t) => s!"{t} : {s}"))
-      | .none => "") ++
-    (match i.axioms with
-     | .some arr => " || " ++ String.intercalate ", " (arr.map (fun t => s!"{t}"))
-     | .none => "") ++ " ⦘⦘"
+  s!"StructInfo ⦗⦗ {i.type} || " ++
+  String.intercalate ", " (i.fields.map (fun (name, s, t) => s!"[{name}] {t} : {s}")) ++
+  " || " ++
+  String.intercalate ", " (i.axioms.map (fun (name, s, t) => s!"[{name}] {t} : {s}"))
+    ++ " ⦘⦘"
 
 instance : ToString StructInfo where
   toString := StructInfo.toString
