@@ -390,6 +390,19 @@ private def lamMutualIndInfo2STerm (mind : MutualIndInfo) :
     infos := infos.push (sname, 0, ⟨#[], cstrDecls⟩)
   return (.declDtypes infos, compCtors, compProjs)
 
+-- private def lamComplexStructure2STerm (struct : StructInfo) :
+--   TransM LamAtom (IR.SMT.Command) := do
+--   -- Go through `type` and call `h2Symb` on all the atoms so that there won't
+--   -- be declared during the following `lamSort2SSort`
+--   let ⟨type, _, _⟩ := struct
+--   let .atom sn := type
+--     | throwError "lamComplexStructure2STerm :: Structure type {type} is not a sort atom"
+--   -- Do not use `lamSortAtom2String` because we don't want to `declare-sort`
+--   let _ ← h2Symb (.sort sn)
+--   -- Declare fields as functions
+--   return ()
+
+
 private def compEqn (lamVarTy lamEVarTy : Array LamSort) (compInfo : String × LamSort × LamTerm) : TransM LamAtom IR.SMT.Command := do
   let (name, s, t) := compInfo
   let argTys := s.getArgTys
@@ -429,7 +442,7 @@ def termAuxDecls : Array IR.SMT.Command :=
 -/
 def lamFOL2SMT
   (lamVarTy lamEVarTy : Array LamSort)
-  (facts : Array LamTerm) (minds : Array MutualIndInfo) :
+  (facts : Array LamTerm) (minds : Array MutualIndInfo) (structs : Array StructInfo):
   TransM LamAtom (Array IR.SMT.Command) := do
   let _ ← sortAuxDecls.mapM addCommand
   let _ ← termAuxDecls.mapM addCommand

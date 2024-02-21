@@ -550,7 +550,8 @@ def collectMonoMutInds :  MonoM (Array (Array SimpleIndVal) × Array ComplexStru
     return Expr.eraseMData ty)
   trace[auto.collectInd] "Collecting inductives from: {citys}"
   let (minds, cinds) ← collectExprsInduct citys
-  let cis ← (minds.concatMap id).mapM (fun ⟨_, type, ctors, projs⟩ => do
+  -- process `minds`
+  let cism ← (minds.concatMap id).mapM (fun ⟨_, type, ctors, projs⟩ => do
     let cis₁ ← collectConstInsts #[] #[] type
     let cis₂ ← ctors.mapM (fun (val, ty) => do
       let cis₁ ← collectConstInsts #[] #[] val
@@ -559,7 +560,16 @@ def collectMonoMutInds :  MonoM (Array (Array SimpleIndVal) × Array ComplexStru
     let projs := (match projs with | .some projs => projs | .none => #[])
     let cis₃ ← projs.mapM (fun e => collectConstInsts #[] #[] e)
     return cis₁ ++ cis₂.concatMap id ++ cis₃.concatMap id)
-  let _ ← (cis.concatMap id).mapM processConstInst
+  -- process `cinds`
+  let cisc ← cinds.mapM (fun ⟨_, type, fields, axioms⟩ => do
+    let cis₁ ← collectConstInsts #[] #[] type
+    let fields := (match fields with | .some fields => fields | .none => #[])
+    let cis₂ ← fields.mapM (fun e => collectConstInsts #[] #[] e)
+    let axioms := (match axioms with | .some axioms => axioms | .none => #[])
+    let cis₃ ← axioms.mapM (fun e => collectConstInsts #[] #[] e)
+    return cis₁ ++ cis₂.concatMap id ++ cis₃.concatMap id)
+  let cis := (cism.concatMap id) ++ (cisc.concatMap id)
+  let _ ← cis.mapM processConstInst
   return (minds, cinds)
 
 namespace FVarRep
@@ -753,6 +763,18 @@ def monomorphize (lemmas : Array Lemma) (inhFacts : Array Lemma) (k : Reif.State
       let projs ← projs.mapM (fun arr => arr.mapM (fun e => do
         FVarRep.replacePolyWithFVar e))
       return ⟨name, type, ctors, projs⟩))
+  -- TODO: George: I'm not entirely sure what this does; will have to check that it's legitimate
+  let fvarRepMStructAction (cstrs : Array ComplexStructure) : FVarRep.FVarRepM (Array ComplexStructure) :=
+    cstrs.mapM (fun cstr => do
+      let ⟨name, type, fields, axioms⟩ := cstr
+      FVarRep.processType type
+      let fields ← fields.mapM (fun arr => arr.mapM (fun e => do
+        FVarRep.processType e
+        FVarRep.replacePolyWithFVar e))
+      let axioms ← axioms.mapM (fun arr => arr.mapM (fun e => do
+        FVarRep.processType e
+        FVarRep.replacePolyWithFVar e))
+      return ⟨name, type, fields, axioms⟩)
   let metaStateMAction : MetaState.MetaStateM (Array FVarId × Reif.State) := (do
     let (uvalids, s) ← fvarRepMFactAction.run { ciMap := monoSt.ciMap }
     for ⟨proof, ty, _⟩ in uvalids do
@@ -774,6 +796,7 @@ def monomorphize (lemmas : Array Lemma) (inhFacts : Array Lemma) (k : Reif.State
     let startTime ← IO.monoMsNow
     trace[auto.mono] "Monomorphizing inductive types took {(← IO.monoMsNow) - startTime}ms"
     let (inductiveVals, s) ← (fvarRepMInductAction inductiveVals).run s
+    let (complexStructs, s) ← (fvarRepMStructAction complexStructs).run s
     return (s.ffvars, Reif.State.mk s.ffvars uvalids polyVal s.tyCanMap inhs inductiveVals complexStructs none))
   MetaState.runWithIntroducedFVars metaStateMAction k
 

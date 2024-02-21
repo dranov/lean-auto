@@ -1673,7 +1673,7 @@ def reifMutInds (minds : Array (Array SimpleIndVal)) : ReifM (Array MutualIndInf
   return ret
 
 def reifStruct (struct : ComplexStructure) : ReifM (Option StructInfo) := do
-  let ⟨name, ty, fields, axioms⟩ := struct
+  let ⟨_, ty, fields, axioms⟩ := struct
   let rty ← reifType ty
   let rfields ← fields.mapM (fun fs => fs.mapM reifTermCheckType)
   let raxioms ← axioms.mapM (fun axs => axs.mapM reifTermCheckType)

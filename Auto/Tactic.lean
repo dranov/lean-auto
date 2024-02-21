@@ -282,14 +282,14 @@ def queryTPTP (exportFacts : Array REntry) : LamReif.ReifM (Array Embedding.Lam.
     return ret
 
 open Embedding.Lam in
-def querySMT (exportFacts : Array REntry) (exportInds : Array MutualIndInfo) : LamReif.ReifM (Option Expr) := do
+def querySMT (exportFacts : Array REntry) (exportInds : Array MutualIndInfo) (exportStructs : Array StructInfo) : LamReif.ReifM (Option Expr) := do
   let lamVarTy := (← LamReif.getVarVal).map Prod.snd
   let lamEVarTy ← LamReif.getLamEVarTy
   let exportLamTerms ← exportFacts.mapM (fun re => do
     match re with
     | .valid [] t => return t
     | _ => throwError "runAuto :: Unexpected error")
-  let commands ← (lamFOL2SMT lamVarTy lamEVarTy exportLamTerms exportInds).run'
+  let commands ← (lamFOL2SMT lamVarTy lamEVarTy exportLamTerms exportInds exportStructs).run'
   for cmd in commands do
     trace[auto.smt.printCommands] "{cmd}"
   if (auto.smt.save.get (← getOptions)) then
@@ -386,7 +386,7 @@ def runAuto
         exportFacts := unsatCore
     -- **SMT**
     if auto.smt.get (← getOptions) then
-      if let .some proof ← querySMT exportFacts exportInds then
+      if let .some proof ← querySMT exportFacts exportInds exportStructs then
         return proof
     -- **Native Prover**
     exportFacts := exportFacts.append (← LamReif.auxLemmas exportFacts)
