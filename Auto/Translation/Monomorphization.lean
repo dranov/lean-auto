@@ -630,6 +630,7 @@ namespace FVarRep
       let city ← instantiateMVars (← MetaState.inferType cie)
       processType city
       let fvarId ← MetaState.withLetDecl userName city cie .default
+      trace[auto.mono.printConstInst] "{ci} -> {userName}"
       setCiIdMap ((← getCiIdMap).insert ci fvarId)
       setFfvars ((← getFfvars).push fvarId)
       return fvarId

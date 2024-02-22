@@ -251,6 +251,7 @@ def lamTermAtom2String (lamVarTy : Array LamSort) (n : Nat) : TransM LamAtom (La
   if !(← hIn (.term n)) then
     let name ← h2Symb (.term n)
     let (argSorts, resSort) ← lamSort2SSort s
+    trace[auto.lamFOL2SMT] "Declaring function {name} : {argSorts} → {resSort}"
     addCommand (.declFun name ⟨argSorts⟩ resSort)
     addNatConstraint? name s
   return (s, ← h2Symb (.term n))
@@ -271,16 +272,19 @@ def lamTermEtom2String (lamEVarTy : Array LamSort) (n : Nat) : TransM LamAtom (L
 private def lamTerm2STermAux (lamVarTy lamEVarTy : Array LamSort) (args : Array STerm) :
   LamTerm → TransM LamAtom STerm
 | .atom n => do
+  trace[auto.lamFOL2SMT] "lamTerm2STermAux [atom] :: {repr (LamTerm.atom n)} | {args}"
   let (s, name) ← lamTermAtom2String lamVarTy n
   if args.size != s.getArgTys.length then
     throwError "lamTerm2STerm :: Argument number mismatch. Higher order input?"
   return .qIdApp (QualIdent.ofString name) args
 | .etom n => do
+
   let (s, name) ← lamTermEtom2String lamEVarTy n
   if args.size != s.getArgTys.length then
     throwError "lamTerm2STerm :: Argument number mismatch. Higher order input?"
   return .qIdApp (QualIdent.ofString name) args
-| .base b =>
+| .base b => do
+  trace[auto.lamFOL2SMT] "lamTerm2STermAux [base] :: {repr b} | {args}"
   match args with
   | #[]           => lamBaseTerm2STerm_Arity0 b
   | #[u₁]         => lamBaseTerm2STerm_Arity1 u₁ b
@@ -304,7 +308,10 @@ def lamQuantified2STerm (forall? : Bool) (s : LamSort) (body : TransM LamAtom ST
   | false => return .existE dname s' body'
 
 private partial def lamTerm2STerm (lamVarTy lamEVarTy : Array LamSort) :
-  LamTerm → TransM LamAtom STerm
+  LamTerm → TransM LamAtom STerm :=
+fun t => do
+trace[auto.lamFOL2SMT] "lamTerm2STerm {t} | {repr t}"
+match t with
 | .base b => lamBaseTerm2STerm_Arity0 b
 | .bvar n => return .bvar n
 | .app _ (.app _ (.base (.eqI _)) _) _ =>
@@ -390,17 +397,33 @@ private def lamMutualIndInfo2STerm (mind : MutualIndInfo) :
     infos := infos.push (sname, 0, ⟨#[], cstrDecls⟩)
   return (.declDtypes infos, compCtors, compProjs)
 
--- private def lamComplexStructure2STerm (struct : StructInfo) :
---   TransM LamAtom (IR.SMT.Command) := do
---   -- Go through `type` and call `h2Symb` on all the atoms so that there won't
---   -- be declared during the following `lamSort2SSort`
---   let ⟨type, _, _⟩ := struct
---   let .atom sn := type
---     | throwError "lamComplexStructure2STerm :: Structure type {type} is not a sort atom"
---   -- Do not use `lamSortAtom2String` because we don't want to `declare-sort`
---   let _ ← h2Symb (.sort sn)
---   -- Declare fields as functions
---   return ()
+private def lamComplexStructure2STerm (lamVarTy lamEVarTy : Array LamSort) (struct : StructInfo) :
+  TransM LamAtom (List IR.SMT.Command) := do
+  -- Go through `type` and call `h2Symb` on all the atoms so that there won't
+  -- be declared during the following `lamSort2SSort`
+  let ⟨type, _, _⟩ := struct
+  let .atom sn := type
+    | throwError "lamComplexStructure2STerm :: Structure type {type} is not a sort atom"
+  let _ ← lamSortAtom2String sn
+
+  let mut funDecls := #[]
+  trace[auto.lamFOL2SMT] "lamVarTy: {lamVarTy} | lamEVarTy: {lamEVarTy}"
+  -- Declare fields as functions
+  for ⟨name, sort, term⟩ in struct.fields do
+    trace[auto.lamFOL2SMT] "Declaring [{name}] term {term} ({repr term}): sort {sort} ({repr sort})"
+    -- FIXME: here it is actually the term that encodes the type, so I think
+    -- I'm making a wrong call somewhere upstream
+    -- let sterm ← lamTerm2STerm lamVarTy lamEVarTy term
+    -- trace[auto.lamFOL2SMT] "Field [{name}] {sterm}"
+    let (argsSorts, resSort) ← lamSort2SSort sort
+    let funDecl : IR.SMT.Command := .declFun name.toString ⟨argsSorts⟩ resSort
+    funDecls := funDecls.push funDecl
+  for ⟨name, sort, term⟩ in struct.axioms do
+    trace[auto.lamFOL2SMT] "Declaring [{name}] term {term} : sort {sort}"
+    -- let sterm ← lamTerm2STerm lamVarTy lamEVarTy term
+    -- trace[auto.lamFOL2SMT] "Asserting [{name}] {sterm}"
+    continue
+  return funDecls.data
 
 
 private def compEqn (lamVarTy lamEVarTy : Array LamSort) (compInfo : String × LamSort × LamTerm) : TransM LamAtom IR.SMT.Command := do
@@ -454,6 +477,10 @@ def lamFOL2SMT
     let _ ← compCtorEqns.mapM addCommand
     let compProjEqns ← compProjs.mapM (compEqn lamVarTy lamEVarTy)
     let _ ← compProjEqns.mapM addCommand
+  for struct in structs do
+    let funDecls ← lamComplexStructure2STerm lamVarTy lamEVarTy struct
+    let _ ← funDecls.mapM addCommand
+  trace[auto.lamFOL2SMT] "{facts.size} fact(s) to be translated to commands: {facts}"
   for (t, idx) in facts.zipWithIndex do
     let sterm ← lamTerm2STerm lamVarTy lamEVarTy t
     trace[auto.lamFOL2SMT] "λ term {repr t} translated to SMT term {sterm}"

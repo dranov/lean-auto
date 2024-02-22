@@ -21,6 +21,12 @@ set_option trace.auto.smt.result true
 example : ∃ (t : Fin 5), True := by
   auto
 
+example : ∃ (x y : Fin 5), x = y := by
+  auto
+
+example : ∃ (x y : Fin 5), x.val = y.val := by
+  auto
+
 structure TotalOrder (t : Type) :=
   -- relation: total order
   le (x y : t) : Bool
