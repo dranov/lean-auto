@@ -221,7 +221,7 @@ mutual
         for (_, type) in inductval.ctors do
           collectExprInduct type
       setSis ((← getSis).push ⟨mutualInductVal⟩)
-    if isComplexStructure then
+    else if isComplexStructure then
       trace[auto.collectInd] "Experimental support for structures with axioms: {tyctor}"
       let complexStructures ← val.all.mapM (collectComplexStruct · lvls args)
       for struct in complexStructures do

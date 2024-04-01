@@ -649,7 +649,10 @@ namespace FVarRep
     return fvarId
 
   /-- Since we're now dealing with monomorphized lemmas, there are no bound level parameters -/
-  partial def replacePolyWithFVar : Expr → FVarRepM Expr
+  partial def replacePolyWithFVar : Expr → FVarRepM Expr :=
+  fun e => do
+  trace[auto.mono] "replacePolyWithFVar :: {e} ({repr e})"
+  match e with
   | .lam name ty body binfo => do
     processType ty
     let fvarId ← MetaState.withLocalDecl name binfo ty .default
@@ -772,10 +775,12 @@ def monomorphize (lemmas : Array Lemma) (inhFacts : Array Lemma) (k : Reif.State
       let fields ← fields.mapM (fun (name, e) => do
         FVarRep.processType e
         let e' ← FVarRep.replacePolyWithFVar e
+        trace[auto.mono.printResult] "replacePolyWithFVar :: {e} ↦ {e'}"
         return (name,e'))
       let axioms ← axioms.mapM (fun (name, e) => do
         FVarRep.processType e
         let e' ← FVarRep.replacePolyWithFVar e
+        trace[auto.mono.printResult] "replacePolyWithFVar :: {e} ↦ {e'}"
         return (name,e'))
       return ⟨name, type, fields, axioms⟩)
   let metaStateMAction : MetaState.MetaStateM (Array FVarId × Reif.State) := (do
