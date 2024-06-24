@@ -1,6 +1,6 @@
 import Lean
-import Std.Data.Nat.Lemmas
-import Std.Logic
+import Batteries.Data.Nat.Lemmas
+import Batteries.Logic
 import Auto.MathlibEmulator
 import Auto.Lib.BoolExtra
 import Auto.Lib.NatExtra
@@ -28,7 +28,7 @@ private theorem wfAux (n n' : Nat) : n = n' + 2 → n / 2 < n := by
     apply Nat.succ_le_succ; apply Nat.zero_le
   case hLtK => apply Nat.le_refl
 
-theorem inductionOn.{u}
+def inductionOn.{u}
   {motive : Nat → Sort u} (x : Nat)
   (ind : ∀ x, motive ((x + 2) / 2) → motive (x + 2))
   (base₀ : motive 0) (base₁ : motive 1) : motive x :=
@@ -38,7 +38,7 @@ theorem inductionOn.{u}
   | x' + 2 => ind x' (inductionOn ((x' + 2) / 2) ind base₀ base₁)
 decreasing_by apply wfAux; rfl
 
-theorem induction.{u}
+def induction.{u}
   {motive : Nat → Sort u}
   (ind : ∀ x, motive ((x + 2) / 2) → motive (x + 2))
   (base₀ : motive 0) (base₁ : motive 1) : ∀ x, motive x :=
@@ -118,7 +118,7 @@ def right! (bt : BinTree α) :=
   | .leaf => leaf
   | .node _ _ r => r
 
-def get?'WF (bt : BinTree α) (n : Nat) : Option α :=
+@[reducible] def get?'WF (bt : BinTree α) (n : Nat) : Option α :=
   match h : n with
   | 0 => .none
   | 1 => bt.val?
@@ -135,7 +135,7 @@ theorem get?'WF.succSucc (bt : BinTree α) (n : Nat) :
     | 0 => get?'WF bt.left! (Nat.div (n + 2) 2)
     | _ + 1 => get?'WF bt.right! (Nat.div (n + 2) 2) := rfl
 
-def get?'Aux (bt : BinTree α) (n rd : Nat) : Option α :=
+@[reducible] def get?'Aux (bt : BinTree α) (n rd : Nat) : Option α :=
   match rd with
   | 0 => .none
   | .succ rd' =>
@@ -198,7 +198,7 @@ theorem get?'_leaf (n : Nat) : @get?' α .leaf n = .none := by
     intro n IH; rw [get?'_succSucc];
     cases (n + 2) % 2 <;> exact IH
 
-def insert'WF (bt : BinTree α) (n : Nat) (x : α) : BinTree α :=
+@[reducible] def insert'WF (bt : BinTree α) (n : Nat) (x : α) : BinTree α :=
   match h : n with
   | 0 => bt
   | 1 =>

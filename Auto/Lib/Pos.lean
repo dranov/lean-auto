@@ -1,5 +1,5 @@
 import Auto.MathlibEmulator
-import Std.Data.Nat.Lemmas
+import Batteries.Data.Nat.Lemmas
 
 namespace Auto
 
@@ -40,7 +40,7 @@ private theorem ofNat'WFAux (n n' : Nat) : n = n' + 2 → n / 2 < n := by
     apply Nat.succ_le_succ; apply Nat.zero_le
   case hLtK => apply Nat.le_refl
 
-def ofNat'WF (n : Nat) :=
+@[reducible] def ofNat'WF (n : Nat) :=
   match h : n with
   | 0 => xH
   | 1 => xH
@@ -50,7 +50,7 @@ def ofNat'WF (n : Nat) :=
     | _ => .xI (ofNat'WF (n / 2))
 decreasing_by rw [← h]; apply ofNat'WFAux; assumption
 
-theorem ofNat'WF.inductionOn.{u}
+def ofNat'WF.inductionOn.{u}
   {motive : Nat → Sort u} (x : Nat)
   (ind : ∀ x, motive ((x + 2) / 2) → motive (x + 2))
   (base₀ : motive 0) (base₁ : motive 1) : motive x :=
@@ -60,17 +60,17 @@ theorem ofNat'WF.inductionOn.{u}
   | x' + 2 => ind x' (inductionOn ((x' + 2) / 2) ind base₀ base₁)
 decreasing_by apply ofNat'WFAux; rfl
 
-theorem ofNat'WF.induction
+def ofNat'WF.induction
   {motive : Nat → Sort u}
   (ind : ∀ x, motive ((x + 2) / 2) → motive (x + 2))
   (base₀ : motive 0) (base₁ : motive 1) : ∀ x, motive x :=
   fun x => ofNat'WF.inductionOn x ind base₀ base₁
 
-theorem ofNat'WF.succSucc (n : Nat) :
+def ofNat'WF.succSucc (n : Nat) :
   ofNat'WF (n + 2) =
     match (n + 2) % 2 with
     | 0 => .xO (ofNat'WF ((n + 2) / 2))
-    | _ => .xI (ofNat'WF ((n + 2) / 2)) := rfl
+    | _ => .xI (ofNat'WF ((n + 2) / 2)) := by rfl
 
 theorem ofNat'WF.double_xO (n : Nat) :
   n ≠ 0 → ofNat'WF (n * 2) = xO (ofNat'WF n) :=
@@ -101,6 +101,7 @@ theorem ofNat'WF.doubleSucc_xI (n : Nat) :
     have heq' : Nat.succ ((2 * n' + 3) / 2) = n' + 2 := by
       apply congrArg; rw [Nat.add_comm];
       rw [Nat.add_mul_div_left _ _ (by simp)]; rw [Nat.add_comm]
+    simp only [Nat.succ_eq_add_one] at heq'
     rw [heq']
 
 theorem ofNat'WF_toNat' (p : Pos) : ofNat'WF (toNat' p) = p := by

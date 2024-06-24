@@ -1,5 +1,5 @@
 import Auto.Lib.NatExtra
-import Std.Data.Int.Lemmas
+import Batteries.Data.Int.Lemmas
 namespace Auto
 
 def Int.beq : Int → Int → Bool

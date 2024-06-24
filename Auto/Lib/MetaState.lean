@@ -8,7 +8,7 @@ namespace Auto.MetaState
 structure State extends Meta.State, Meta.Context
 
 structure SavedState where
-  core       : Core.State
+  core       : Core.SavedState
   meta       : State
 
 abbrev MetaStateM := StateRefT State CoreM
@@ -31,10 +31,10 @@ instance : AddMessageContext MetaStateM where
   addMessageContext := addMessageContextFull
 
 protected def saveState : MetaStateM SavedState :=
-  return { core := (← getThe Core.State), meta := (← get) }
+  return { core := (← Core.saveState), meta := (← get) }
 
 def SavedState.restore (b : SavedState) : MetaStateM Unit := do
-  Core.restore b.core
+  b.core.restore
   modify fun s => { s with mctx := b.meta.mctx, zetaDeltaFVarIds := b.meta.zetaDeltaFVarIds, postponed := b.meta.postponed }
 
 instance : MonadBacktrack SavedState MetaStateM where
